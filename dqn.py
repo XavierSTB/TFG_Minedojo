@@ -241,6 +241,8 @@ seq_memory = collections.deque(maxlen=stack_depth)
 
 done = False
 
+training = False
+
 batch_size = 32
 
 update_threshold = 35
