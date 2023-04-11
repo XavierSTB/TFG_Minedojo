@@ -21,7 +21,7 @@ keras.backend.set_image_data_format('channels_first')
 class MineAgent:
     def __init__(self, en3v):
         self.env = env
-        self.num_actions = 45453
+        self.num_actions = 45453 ##numero mayor del espacio de acciones escogido pasado a binario
         self.epsilon = 1
         self.epsilon_min = 0.1
         self.decay_factor = 0.000018
@@ -90,6 +90,7 @@ class MineAgent:
         return b_number
 
     def action_trans(act):
+        ## tenemos en res la accion nula
         res = gym.spaces.MultiDiscrete(np.array([[3], [3], [4], [25], [25], [8], [244],[36]]))
         res = res.sample()
         res[0] = [0]
@@ -100,14 +101,16 @@ class MineAgent:
         res[5] = [0]
         res[6] = [0]
         res[7] = [0]
-
+        #binarizamos y llenamos con los zeros necesarios nuestro vector de bits
         bin_act = np.binary_repr(act)
         bin_act = MineAgent.add_zeros(bin_act, 16)
+        #extraemos el valor de cada seccion de bits
         act_int = int(bin_act[0:2], 2)
         act_cam_x = int(bin_act[2:7], 2)
         act_cam_y = int(bin_act[7:12], 2)
         act_jmp = int(bin_act[12:13], 2)
         act_mov = int(bin_act[13:16], 2)
+        #escogemos si el valor es valido y que valor tiene en funcion de las directrices marcadas
         if(act == 0 | act_int >> 2 | act_cam_x >> 24 | act_cam_y >> 24 | act_mov >> 5):
             return res
         else:
@@ -129,11 +132,8 @@ class MineAgent:
 
     def greedy_action(self, current_state):
         
-        ##cambiar el num_actions a todas las posibles combinaciones? 1.581.120.000 combinaciones.
-        ##luego traducir de las xxx acciones al vector
-
-        ##se podria reducir las acciones dejando algunas fijas como la de craftear(/244), equip(/36), y reducir las functinoals a 3
-        ##la propuesta de reduccion de acciones podria dejar tener un total de 67.500 posibles combinaciones
+        ##pasamos la acccion con el q_value mayor a la funcion actions_trans
+        ##esta funcion convierte el numero en binario escogido a una accion del espacio que hemos delimitado
         
         current_state = np.float32(np.true_divide(current_state,255))
         action_mask = np.ones((1, self.num_actions))
@@ -214,7 +214,7 @@ class MineAgent:
         return actions
 
     def get_one_hot(self, actions):
-        ###entender como hace el one hot encoding y adaptarlo
+        ###pasamos la accion a un numero en binario bajo las transformaciones marcadas
         actions = np.array(actions)
         actions = MineAgent.trans_action(actions)
         one_hots = np.zeros((len(actions), self.num_actions))
@@ -261,8 +261,7 @@ for episode in range(1,episodes):
 
     seq_memory.clear()
     initial_state = env.reset()
-    current_image = env.observation_space["rgb"] #env.render(mode = 'rgb_array')
-    print(current_image)
+    current_image = env.observation_space["rgb"] #enviamos las observaciones del juego a la funcion que las procesa
     frame = agent.process_image(current_image)
     frame = frame.reshape(1, frame.shape[0], frame.shape[1])
     current_state = np.repeat(frame, stack_depth, axis=0)
