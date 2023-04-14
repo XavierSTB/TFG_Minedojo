@@ -21,7 +21,7 @@ keras.backend.set_image_data_format('channels_first')
 class MineAgent:
     def __init__(self, en3v):
         self.env = env
-        self.num_actions = 45453 ##numero mayor del espacio de acciones escogido pasado a binario
+        self.num_actions = 45453
         self.epsilon = 1
         self.epsilon_min = 0.1
         self.decay_factor = 0.000018
@@ -77,10 +77,11 @@ class MineAgent:
         self.memory.append([current_state, action, reward, next_state, done])
 
     def process_image(self, image):
+        image = np.transpose(image, (1, 2, 0))
         if len(image.shape) == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        image = cv2.resize(image, (self.image_width, self.image_height))
+        #image = cv2.resize(image, (self.image_width, self.image_height))
 
         return image
 
@@ -90,57 +91,38 @@ class MineAgent:
         return b_number
 
     def action_trans(act):
-        ## tenemos en res la accion nula
-        res = gym.spaces.MultiDiscrete(np.array([[3], [3], [4], [25], [25], [8], [244],[36]]))
-        res = res.sample()
-        res[0] = [0]
-        res[1] = [0]
-        res[2] = [0]
-        res[3] = [12]
-        res[4] = [12]
-        res[5] = [0]
-        res[6] = [0]
-        res[7] = [0]
-        #binarizamos y llenamos con los zeros necesarios nuestro vector de bits
-        bin_act = np.binary_repr(act)
-        bin_act = MineAgent.add_zeros(bin_act, 16)
-        #extraemos el valor de cada seccion de bits
+        res = np.array([0, 0, 0, 12, 12, 0, 0, 0])
+        bin_act = MineAgent.add_zeros(act, 16)
         act_int = int(bin_act[0:2], 2)
         act_cam_x = int(bin_act[2:7], 2)
         act_cam_y = int(bin_act[7:12], 2)
         act_jmp = int(bin_act[12:13], 2)
         act_mov = int(bin_act[13:16], 2)
-        #escogemos si el valor es valido y que valor tiene en funcion de las directrices marcadas
         if(act == 0 | act_int >> 2 | act_cam_x >> 24 | act_cam_y >> 24 | act_mov >> 5):
             return res
         else:
             if(act_int == 2):
-                res[5] = [3]
+                res[5] = 3
             else:
-                res[5] = [act_int]
-            res[3] = [act_cam_x]
-            res[4] = [act_cam_y]
-            res[2] = [act_jmp]
+                res[5] = act_int
+            res[3] = act_cam_x
+            res[4] = act_cam_y
+            res[2] = act_jmp
             if(act_mov == 3):
-                res[1] = [1]
+                res[1] = 1
             elif(act_mov == 4):
-                res[1] = [2]
+                res[1] = 2
             else:
-                res[0] = [act_mov]
+                res[0] = act_mov
             return res
             
 
     def greedy_action(self, current_state):
-        
-        ##pasamos la acccion con el q_value mayor a la funcion actions_trans
-        ##esta funcion convierte el numero en binario escogido a una accion del espacio que hemos delimitado
-        
         current_state = np.float32(np.true_divide(current_state,255))
         action_mask = np.ones((1, self.num_actions))
         q_values = self.model.predict([current_state, action_mask])[0]
         greedy_action = np.argmax(q_values)
-
-        greedy_action = MineAgent.action_trans(greedy_action)
+        greedy_action = MineAgent.action_trans(np.binary_repr(greedy_action))
 
         return greedy_action
 
@@ -181,42 +163,43 @@ class MineAgent:
 
         return current_states, action_mask_current, targets
 
-    def trans_action(actions):
+    def trans_single_action(action):
         #iniciem els diferents sector de bits
         bin_mov = '000'
         bin_jmp = '0'
         bin_cam_x = '00000'
         bin_cam_y = '00000'
         bin_int = '00'
-        for action in actions:
-            #definim la direccio del moviment
-            if(action[0][0] >> 0):
-                bin_mov = np.binary_repr(action[0][0])
-            elif(action[1][0] >> 0):
-                bin_mov = np.binary_repr(action[1][0] + 2)
-            #definim si salta o no
-            if(action[2][0] == 1):
-                bin_jmp = '1'
-            #definim els angles de les cameres
-            bin_cam_x = np.binary_repr(action[3][0])
-            bin_cam_y = np.binary_repr(action[4][0])
-            #definim la interaccio amb el mon
-            if(action[5][0] == 1):
-                bin_int = '01'
-            elif(action[5][0] == 3):
-                bin_int = '10'
-            #omplim els bits en cas que faltin
-            bin_mov = MineAgent.add_zeros(bin_mov, 3)
-            bin_cam_x = MineAgent.add_zeros(bin_cam_x, 5)
-            bin_cam_y = MineAgent.add_zeros(bin_cam_y, 5)
-            #ajuntem els diferents trams en una filera de bits unica
-            action = bin_int + bin_cam_x + bin_cam_y + bin_jmp + bin_mov
-        return actions
+        #definim la direccio del moviment
+        if(action[0] >> 0):
+            bin_mov = np.binary_repr(action[0])
+        elif(action[1] >> 0):
+            bin_mov = np.binary_repr(action[1] + 2)
+        #definim si salta o no
+        if(action[2]== 1):
+            bin_jmp = '1'
+        #definim els angles de les cameres
+        bin_cam_x = np.binary_repr(action[3])
+        bin_cam_y = np.binary_repr(action[4])
+        #definim la interaccio amb el mon
+        if(action[5] == 1):
+            bin_int = '01'
+        elif(action[5] == 3):
+            bin_int = '10'
+        #omplim els bits en cas que faltin
+        bin_mov = MineAgent.add_zeros(bin_mov, 3)
+        bin_cam_x = MineAgent.add_zeros(bin_cam_x, 5)
+        bin_cam_y = MineAgent.add_zeros(bin_cam_y, 5)
+        #ajuntem els diferents trams en una filera de bits unica
+        action = bin_int + bin_cam_x + bin_cam_y + bin_jmp + bin_mov
+        return action
 
     def get_one_hot(self, actions):
-        ###pasamos la accion a un numero en binario bajo las transformaciones marcadas
+        ###entender como hace el one hot encoding y adaptarlo
         actions = np.array(actions)
-        actions = MineAgent.trans_action(actions)
+        for action in actions:
+            action = MineAgent.trans_single_action(action)
+        #actions = MineAgent.trans_action(actions)
         one_hots = np.zeros((len(actions), self.num_actions))
 
         for i in range(self.num_actions):
@@ -260,10 +243,9 @@ frame_skip = 4
 ep_reward = []
 
 for episode in range(1,episodes):
-
     seq_memory.clear()
     initial_state = env.reset()
-    current_image = env.observation_space["rgb"] #enviamos las observaciones del juego a la funcion que las procesa
+    current_image = env.prev_obs["rgb"]
     frame = agent.process_image(current_image)
     frame = frame.reshape(1, frame.shape[0], frame.shape[1])
     current_state = np.repeat(frame, stack_depth, axis=0)
@@ -277,14 +259,14 @@ for episode in range(1,episodes):
                 agent.epsilon = max(agent.epsilon_min, agent.epsilon)
 
             if np.random.rand() <= agent.epsilon:
-                action = env.action_space.sample()
+                aux_act = MineAgent.trans_single_action(env.action_space.sample())
+                action = MineAgent.action_trans(aux_act)
             else:
                 action = agent.greedy_action(current_state.reshape(1, current_state.shape[0]\
                                    , current_state.shape[1], current_state.shape[2]))
-
         next_pos, reward, done, _ = env.step(action)
 
-        next_frame = env.render(mode='rgb_array')### revisar manera de pillar imagen
+        next_frame = env.prev_obs["rgb"]
         next_frame = agent.process_image(next_frame)
         seq_memory.append(next_frame)
 
