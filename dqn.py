@@ -19,7 +19,7 @@ keras.backend.set_image_data_format('channels_first')
 
 
 class MineAgent:
-    def __init__(self, en3v):
+    def __init__(self, env):
         self.env = env
         self.num_actions = 45453
         self.epsilon = 1
