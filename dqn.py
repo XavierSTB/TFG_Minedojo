@@ -15,7 +15,7 @@ from keras import optimizers
 
 import pickle
 
-keras.backend.set_image_data_format('channels_first')
+keras.backend.set_image_data_format('channels_last')
 
 
 class MineAgent:
@@ -26,7 +26,7 @@ class MineAgent:
         self.epsilon_min = 0.1
         self.decay_factor = 0.000018
         self.discount_factor = 0.99
-        self.memory = collections.deque(maxlen=200000)
+        self.memory = collections.deque(maxlen=20000)
         self.learning_rate = 0.00025                   # Learning rate for the Neural network
         self.image_width = 256                         # Input image width
         self.image_height = 160                        # Input image height
@@ -92,29 +92,42 @@ class MineAgent:
 
     def action_trans(act):
         res = np.array([0, 0, 0, 12, 12, 0, 0, 0])
+        #if training:
+            #print(act)
         bin_act = MineAgent.add_zeros(act, 16)
-        act_int = int(bin_act[0:2], 2)
-        act_cam_x = int(bin_act[2:7], 2)
-        act_cam_y = int(bin_act[7:12], 2)
-        act_jmp = int(bin_act[12:13], 2)
-        act_mov = int(bin_act[13:16], 2)
-        if(act == 0 | act_int >> 2 | act_cam_x >> 24 | act_cam_y >> 24 | act_mov >> 5):
-            return res
+        act_int = int(bin_act[14:16], 2)
+        act_cam_x = int(bin_act[4:9], 2)
+        act_cam_y = int(bin_act[9:14], 2)
+        act_jmp = int(bin_act[3:4], 2)
+        act_mov = int(bin_act[0:3], 2)
+        #if training:
+            #print(act_mov)
+            #print(act_jmp)
+            #print(act_cam_x)
+            #print(act_cam_y)
+            #print(act_int)
+        if act_int > 2:
+            act_int = 0
+        if act_cam_x > 24:
+            act_cam_x = 0
+        if act_cam_y > 24:
+            act_cam_y = 0
+        if act_mov > 4:
+            act_mov = 0
+        if(act_int == 2):
+            res[5] = 3
         else:
-            if(act_int == 2):
-                res[5] = 3
-            else:
-                res[5] = act_int
-            res[3] = act_cam_x
-            res[4] = act_cam_y
-            res[2] = act_jmp
-            if(act_mov == 3):
-                res[1] = 1
-            elif(act_mov == 4):
-                res[1] = 2
-            else:
-                res[0] = act_mov
-            return res
+            res[5] = act_int
+        res[3] = act_cam_x
+        res[4] = act_cam_y
+        res[2] = act_jmp
+        if(act_mov == 3):
+            res[1] = 1
+        elif(act_mov == 4):
+            res[1] = 2
+        else:
+            res[0] = act_mov
+        return res
             
 
     def greedy_action(self, current_state):
@@ -123,7 +136,6 @@ class MineAgent:
         q_values = self.model.predict([current_state, action_mask])[0]
         greedy_action = np.argmax(q_values)
         greedy_action = MineAgent.action_trans(np.binary_repr(greedy_action))
-
         return greedy_action
 
     def calculate_targets(self, batch_size):
@@ -171,9 +183,9 @@ class MineAgent:
         bin_cam_y = '00000'
         bin_int = '00'
         #definim la direccio del moviment
-        if(action[0] >> 0):
+        if(action[0] > 0):
             bin_mov = np.binary_repr(action[0])
-        elif(action[1] >> 0):
+        elif(action[1] > 0):
             bin_mov = np.binary_repr(action[1] + 2)
         #definim si salta o no
         if(action[2]== 1):
@@ -191,19 +203,19 @@ class MineAgent:
         bin_cam_x = MineAgent.add_zeros(bin_cam_x, 5)
         bin_cam_y = MineAgent.add_zeros(bin_cam_y, 5)
         #ajuntem els diferents trams en una filera de bits unica
-        action = bin_int + bin_cam_x + bin_cam_y + bin_jmp + bin_mov
+        action =bin_mov + bin_jmp + bin_cam_x + bin_cam_y + bin_int 
         return action
 
     def get_one_hot(self, actions):
         ###entender como hace el one hot encoding y adaptarlo
         actions = np.array(actions)
-        for action in actions:
-            action = MineAgent.trans_single_action(action)
-        #actions = MineAgent.trans_action(actions)
+        actions2 = np.zeros(len(actions))
+        for i in range(len(actions)):
+            aux = MineAgent.trans_single_action(actions[i])
+            actions2[i] =int(aux,2)
         one_hots = np.zeros((len(actions), self.num_actions))
-
         for i in range(self.num_actions):
-            one_hots[:, i][np.where(actions == i)] = 1
+            one_hots[:, i][np.where(actions2 == i)] = 1
 
         return one_hots
 
@@ -214,6 +226,9 @@ class MineAgent:
     def save_model(self, name):
         self.model.save(name)
 
+def cow_killer(env):
+    for cmd in ["/kill @e[type=!player]", "/clear", "/kill @e[type=item]"]:
+        env.env.unwrapped.execute_cmd(cmd)
 
 env = minedojo.make(task_id="combat_sheep_plains_iron_armors_diamond_sword_shield", image_size=(160, 256))
 agent = MineAgent(env)
@@ -232,11 +247,11 @@ update_threshold = 35
 
 save_threshold = 1000
 
-episodes = 1000001
+episodes =200 #1000001
 
 time_steps = 300
 
-collect_experience = agent.memory.maxlen - 50000
+collect_experience = agent.memory.maxlen - 5000
 
 frame_skip = 4
 
@@ -259,13 +274,18 @@ for episode in range(1,episodes):
                 agent.epsilon = max(agent.epsilon_min, agent.epsilon)
 
             if np.random.rand() <= agent.epsilon:
+                if training:
+                    print("rand:")
                 aux_act = MineAgent.trans_single_action(env.action_space.sample())
                 action = MineAgent.action_trans(aux_act)
             else:
+                if training:
+                    print("greedy:")
                 action = agent.greedy_action(current_state.reshape(1, current_state.shape[0]\
                                    , current_state.shape[1], current_state.shape[2]))
+        if training:
+            print(action)
         next_pos, reward, done, _ = env.step(action)
-
         next_frame = env.prev_obs["rgb"]
         next_frame = agent.process_image(next_frame)
         seq_memory.append(next_frame)
@@ -285,6 +305,7 @@ for episode in range(1,episodes):
 
         episode_reward = episode_reward + reward
 
+
         if done: 
             break
 
@@ -301,5 +322,7 @@ for episode in range(1,episodes):
         print('Data saved at episode:', episode)
         agent.save_model('./train/DQN_CNN_model_{}.h5'.format(episode))
         pickle.dump(ep_reward, open('./train/rewards_{}.dump'.format(episode), 'wb'))
+
+    cow_killer(env)
 
 env.close()
