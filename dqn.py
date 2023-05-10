@@ -21,18 +21,18 @@ keras.backend.set_image_data_format('channels_last')
 class MineAgent:
     def __init__(self, env):
         self.env = env
-        self.num_actions = 45453
-        self.epsilon = 1
-        self.epsilon_min = 0.1
-        self.decay_factor = 0.000018
-        self.discount_factor = 0.99
-        self.memory = collections.deque(maxlen=20000)
-        self.learning_rate = 0.00025                   # Learning rate for the Neural network
-        self.image_width = 256                         # Input image width
-        self.image_height = 160                        # Input image height
-        self.stack_depth = 4                           # Number of image samples to stack
-        self.model = self.create_CNN_model()           # Initialize the Neural network
-        self.target_model = self.create_CNN_model()    # Initialize a target model
+        self.num_actions = 45453                       
+        self.epsilon = 1                               # epsilon propio
+        self.epsilon_min = 0.1                         # valor de epsilon minimo
+        self.decay_factor = 0.000018                   # valor por el que el epsilon es reducido en cada episodio
+        self.discount_factor = 0.99                    # Factor con el que se descuentan futuras recompensa
+        self.memory = collections.deque(maxlen=20000)  # Memoria para guardar experiencia
+        self.learning_rate = 0.00025                   # Ratio de aprendizaje del a Neural Network
+        self.image_width = 256                         # Ancho de la imagen del input
+        self.image_height = 160                        # Altura de la imagen del input
+        self.stack_depth = 4                           # Numero de imagenes que apilar
+        self.model = self.create_CNN_model()           # Iniciar Neural network
+        self.target_model = self.create_CNN_model()    # Iniciar el target model
         self.update_target_weights()  
 
     def create_CNN_model(self):
@@ -91,21 +91,17 @@ class MineAgent:
         return b_number
 
     def action_trans(act):
+        #definimos lo que sera la accion nula
         res = np.array([0, 0, 0, 12, 12, 0, 0, 0])
-        #if training:
-            #print(act)
+        #llenamos los bits en caso que falten
         bin_act = MineAgent.add_zeros(act, 16)
+        #separamos el binario en sus diferentes tramos
         act_int = int(bin_act[14:16], 2)
         act_cam_x = int(bin_act[4:9], 2)
         act_cam_y = int(bin_act[9:14], 2)
         act_jmp = int(bin_act[3:4], 2)
         act_mov = int(bin_act[0:3], 2)
-        #if training:
-            #print(act_mov)
-            #print(act_jmp)
-            #print(act_cam_x)
-            #print(act_cam_y)
-            #print(act_int)
+        #si el valor que tiene la accion no nos interesa lo hacemos nulo
         if act_int > 2:
             act_int = 0
         if act_cam_x > 24:
@@ -114,6 +110,7 @@ class MineAgent:
             act_cam_y = 0
         if act_mov > 4:
             act_mov = 0
+        #asiganmos los valores a la accion
         if(act_int == 2):
             res[5] = 3
         else:
@@ -176,38 +173,37 @@ class MineAgent:
         return current_states, action_mask_current, targets
 
     def trans_single_action(action):
-        #iniciem els diferents sector de bits
+        #iniciamos los diferentes sectores de bits
         bin_mov = '000'
         bin_jmp = '0'
         bin_cam_x = '00000'
         bin_cam_y = '00000'
         bin_int = '00'
-        #definim la direccio del moviment
+        #definimps la direccion del movimento
         if(action[0] > 0):
             bin_mov = np.binary_repr(action[0])
         elif(action[1] > 0):
             bin_mov = np.binary_repr(action[1] + 2)
-        #definim si salta o no
+        #definimos si salta o no
         if(action[2]== 1):
             bin_jmp = '1'
-        #definim els angles de les cameres
+        #definimos los angulos de las camaras
         bin_cam_x = np.binary_repr(action[3])
         bin_cam_y = np.binary_repr(action[4])
-        #definim la interaccio amb el mon
+        #definimos la interaccion con el mundo
         if(action[5] == 1):
             bin_int = '01'
         elif(action[5] == 3):
             bin_int = '10'
-        #omplim els bits en cas que faltin
+        #llenamos los bits en caso que falten
         bin_mov = MineAgent.add_zeros(bin_mov, 3)
         bin_cam_x = MineAgent.add_zeros(bin_cam_x, 5)
         bin_cam_y = MineAgent.add_zeros(bin_cam_y, 5)
-        #ajuntem els diferents trams en una filera de bits unica
+        #juntamos los diferentes tramos en una fila de bits unica
         action =bin_mov + bin_jmp + bin_cam_x + bin_cam_y + bin_int 
         return action
 
     def get_one_hot(self, actions):
-        ###entender como hace el one hot encoding y adaptarlo
         actions = np.array(actions)
         actions2 = np.zeros(len(actions))
         for i in range(len(actions)):
@@ -227,6 +223,9 @@ class MineAgent:
         self.model.save(name)
 
 def cow_killer(env):
+    #esta funcion borra las entidades una vez hemos completado un episodio
+    #esto lo hace para no llegar al episodio 100 y estar rodeado 
+    #de 100 criaturas en vez de 1 como aclaramos en el experimento
     for cmd in ["/kill @e[type=!player]", "/clear", "/kill @e[type=item]"]:
         env.env.unwrapped.execute_cmd(cmd)
 
