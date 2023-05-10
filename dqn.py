@@ -242,9 +242,9 @@ training = False
 
 batch_size = 32
 
-update_threshold = 35
+update_threshold = 5
 
-save_threshold = 1000
+save_threshold = 10
 
 episodes =200 #1000001
 
